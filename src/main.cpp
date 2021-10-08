@@ -2,6 +2,7 @@
 #include <math.h>
 #include "window.h"
 #define PI 3.14159265359
+#define ONEDEGREE 0.017453
 
 void draw_player(int px, int py, float pa, const Window& w)
 {
@@ -70,15 +71,18 @@ void draw_rays(float pa, int px, int py, const Window& w, int map[])
 	float ra = pa;
 	float rx, ry;
 	int xo, yo;
-	int mx, my, mp;
+	int mx, my, mp, mo;
 	std::pair<float, std::pair<int, int>> dh, dv;
 	int dof;
-	for (int r = 0; r < 1; r++)
+	ra -= PI / 6;
+	for (int r = 0; r < 60; r++)
 	{
+		
 		dof = 0;
 		float cotan = 1.0 / tan(ra);
 		if (ra > PI)
 		{
+			mo = 0;
 			ry = round_up(py, 64);
 			rx = (py - ry) * cotan + px;
 			yo = 64;
@@ -86,6 +90,7 @@ void draw_rays(float pa, int px, int py, const Window& w, int map[])
 		}
 		else if (ra < PI)
 		{
+			mo = 1;
 			ry = round_up(py, 64) - 64;
 			rx = (py - ry) * cotan + px;
 			yo = -64;
@@ -94,13 +99,14 @@ void draw_rays(float pa, int px, int py, const Window& w, int map[])
 
 		else
 		{
+			mo = 0;
 			rx = px; ry = py; dof = 8;
 		}
 
 		while (dof < 8)
 		{
 			mx = (int)(rx) >> 6;
-			my = (int)(ry) >> 6;
+			my = ((int)(ry) >> 6) - mo;
 			mp = my * 8 + mx;
 			if (mp < 64 && mp >= 0 && map[mp] == 1) // wall has been hit
 			{
@@ -127,6 +133,7 @@ void draw_rays(float pa, int px, int py, const Window& w, int map[])
 			ry = (px - rx) * ta + py;
 			xo = -64;
 			yo = -xo * ta;
+			mo = 1;
 		}
 		else if (ra < PI / 2 || ra > 3 * PI / 2)
 		{
@@ -134,16 +141,17 @@ void draw_rays(float pa, int px, int py, const Window& w, int map[])
 			ry = (px - rx) * ta + py;
 			xo = 64;
 			yo = -xo * ta;
+			mo = 0;
 		}
 
 		else
 		{
-			ry = py; rx = px; dof = 8;
+			ry = py; rx = px; dof = 8; mo = 1;
 		}
 
 		while (dof < 8)
 		{
-			mx = (int)(rx) >> 6;
+			mx = ((int)(rx) >> 6) - mo;
 			my = (int)(ry) >> 6;
 			mp = my * 8 + mx;
 			if (mp < 64 && mp >= 0 && map[mp] == 1) // wall has been hit
@@ -172,7 +180,9 @@ void draw_rays(float pa, int px, int py, const Window& w, int map[])
 			SDL_RenderDrawLine(w.m_rend, px, py, dv.second.first, dv.second.second);
 		}
 
-		std::cout << dv.first << " " <<  dh.first << std::endl;
+		ra += ONEDEGREE;
+		if (ra < 0) ra += 2 * PI;
+		else if (ra > 2 * PI) ra -= 2 * PI;
 	}
 }
 int main(int argv, char** argc)
