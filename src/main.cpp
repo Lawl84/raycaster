@@ -1,5 +1,6 @@
 #include <SDL.h>
 #include <math.h>
+#include <vector>
 #include "window.h"
 #define PI 3.14159265359
 #define ONEDEGREE 0.017453
@@ -30,6 +31,23 @@ int round_up(float numToRound, int multiple)
 		return numToRound;
 
 	return numToRound + multiple - remainder;
+}
+
+bool collides(const SDL_Rect player_rect, const SDL_Rect& rect)
+{
+	bool a, b, c, d;
+	int x1 = player_rect.x, y1 = player_rect.y;
+	int x2 = player_rect.x + player_rect.w, y2 = y1;
+	int x3 = x1, y3 = player_rect.y + player_rect.h;
+	int x4 = x2, y4 = y1;
+
+	a = (x1 >= rect.x && x1 <= rect.x + rect.w) && (y1 >= rect.y && y1 <= rect.y + rect.h);
+	b = (x2 >= rect.x && x2 <= rect.x + rect.w) && (y2 >= rect.y && y2 <= rect.y + rect.h);
+	c = (x3 >= rect.x && x3 <= rect.x + rect.w) && (y3 >= rect.y && y3 <= rect.y + rect.h);
+	d = (x4 >= rect.x && x4 <= rect.x + rect.w) && (y4 >= rect.y && y4 <= rect.y + rect.h);
+
+	return a || b || c || d;
+	
 }
 
 void draw_map(const Window& w)
@@ -65,26 +83,43 @@ void draw_map(const Window& w)
 	}
 }
 
-void draw_rays(float pa, int px, int py, const Window& w, int map[])
+std::vector<SDL_Rect> generate_collision_points(int map[])
+{
+	std::vector<SDL_Rect> areas;
+	for (int y = 0; y < 8; y++)
+	{
+		for (int x = 0; x < 8; x++)
+		{
+			if (map[y * 8 + x] == 1)
+			{
+				areas.emplace_back(SDL_Rect{ x * 64, y * 64, 64, 64 });
+			}
+		}
+	}
+	return areas;
+}
+
+void draw_rays(float pa, float px, float py, const Window& w, int map[])
 {
 	//horizontal line check
 	float ra = pa;
 	float rx, ry;
-	int xo, yo;
+	float xo, yo;
 	int mx, my, mp, mo;
 	std::pair<float, std::pair<int, int>> dh, dv;
+	float dist;
 	int dof;
 	ra -= PI / 6;
 	for (int r = 0; r < 60; r++)
 	{
-		
+		std::cout << ra << std::endl;
 		dof = 0;
 		float cotan = 1.0 / tan(ra);
 		if (ra > PI)
 		{
 			mo = 0;
 			ry = round_up(py, 64);
-			rx = (py - ry) * cotan + px;
+			rx = (py - ry) * cotan + (float)px;
 			yo = 64;
 			xo = -yo * cotan;
 		}
@@ -92,7 +127,7 @@ void draw_rays(float pa, int px, int py, const Window& w, int map[])
 		{
 			mo = 1;
 			ry = round_up(py, 64) - 64;
-			rx = (py - ry) * cotan + px;
+			rx = (py - ry) * cotan + (float)px;
 			yo = -64;
 			xo = -yo * cotan;
 		}
@@ -118,6 +153,11 @@ void draw_rays(float pa, int px, int py, const Window& w, int map[])
 				ry += yo;
 				dof++;
 			}
+
+			if (dof >= 9)
+			{
+				std::cout << ra << std::endl;
+			}
 		}
 		
 		dh.first = distance_between_points(px, py, rx, ry);
@@ -127,18 +167,18 @@ void draw_rays(float pa, int px, int py, const Window& w, int map[])
 
 		dof = 0;
 		float ta = tan(ra);
-		if (ra > PI / 2 && ra < 3 * PI / 2)
+		if (ra > PI / (float)2 && ra < 3 * PI / (float)2)
 		{
 			rx = round_up(px, 64) - 64;
-			ry = (px - rx) * ta + py;
+			ry = (px - rx) * ta + (float)py;
 			xo = -64;
 			yo = -xo * ta;
 			mo = 1;
 		}
-		else if (ra < PI / 2 || ra > 3 * PI / 2)
+		else if (ra < PI / (float)2 || ra > 3 * PI / (float)2)
 		{
 			rx = round_up(px, 64);
-			ry = (px - rx) * ta + py;
+			ry = (px - rx) * ta + (float)py;
 			xo = 64;
 			yo = -xo * ta;
 			mo = 0;
@@ -169,18 +209,37 @@ void draw_rays(float pa, int px, int py, const Window& w, int map[])
 		dv.first = distance_between_points(px, py, rx, ry);
 		dv.second = { rx, ry };
 
-		SDL_SetRenderDrawColor(w.m_rend, 0, 255, 255, 255);
+		SDL_SetRenderDrawColor(w.m_rend, 255, 153, 153, 255);
 
 		if (dv.first > dh.first)
 		{
 			SDL_RenderDrawLine(w.m_rend, px, py, dh.second.first, dh.second.second);
+			dist = dh.first;
 		}
 		else
 		{
 			SDL_RenderDrawLine(w.m_rend, px, py, dv.second.first, dv.second.second);
+			dist = dv.first;
 		}
 
-		ra += ONEDEGREE;
+		////walls
+		float ca = pa - ra;
+		dist *= cos(ca);
+
+		float line_height = 64 * 1000 / dist;
+		float line_offset = 300 - line_height / 2;
+
+		if (ca < 0) ca += 2 * PI;
+		else if (ca > 2 * PI) ca -= 2 * PI;
+
+		if (line_height > 600) line_height = 600;
+		SDL_Rect wall = { r * 16 , line_offset + 4, 16, line_height };
+
+		SDL_RenderFillRect(w.m_rend, &wall);
+		SDL_RenderDrawLine(w.m_rend, r * 8, line_offset + 4, r * 8, line_offset + 4 + line_height);
+
+
+		ra += PI / 180;
 		if (ra < 0) ra += 2 * PI;
 		else if (ra > 2 * PI) ra -= 2 * PI;
 	}
@@ -190,6 +249,7 @@ int main(int argv, char** argc)
 	Window w;
 	SDL_Event evt;
 	bool running = true;
+	bool valid_point = true;
 
 	int map[] =
 	{
@@ -203,15 +263,19 @@ int main(int argv, char** argc)
 		1, 1, 1, 1, 1, 1, 1, 1
 	};
 
+	std::vector<SDL_Rect> areas = generate_collision_points(map);
+
 	int px = 245;
 	int py = 395;
 
+	SDL_Rect player_rect = { px, py, 10, 10 };
 	float pa = PI / 2, dpa = 0;
 
 	int dpx = 0, dpy = 0;
 
 	while (running)
 	{
+		
 		int mxi, myi;
 		SDL_GetMouseState(&mxi, &myi);
 
@@ -228,16 +292,16 @@ int main(int argv, char** argc)
 				{
 				case SDLK_w:
 					dpy = -5 * sin(pa); dpx = cos(pa) * 5; break;
-				case SDLK_a:
+				case SDLK_d:
 					dpx = -5 * sin(pa); dpy = -cos(pa) * 5; break;
 				case SDLK_s:
 					dpy = 5 * sin(pa); dpx = -cos(pa) * 5;  break;
-				case SDLK_d:
+				case SDLK_a:
 					dpx = 5 * sin(pa); dpy = 5 * cos(pa); break;
 				case SDLK_RIGHT:
-					dpa = -0.1; break;
-				case SDLK_LEFT:
 					dpa = 0.1; break;
+				case SDLK_LEFT:
+					dpa = -0.1; break;
 				}
 				break;
 
@@ -260,10 +324,27 @@ int main(int argv, char** argc)
 
 			}
 		}
+
+		player_rect = { px + dpx, py + dpy, 6, 6 };
+
 		pa += dpa;
 
-		px += dpx;
-		py += dpy;
+		for (auto& r : areas)
+		{
+			if (collides(player_rect, r)) 
+			{
+				valid_point = false;
+				break;
+			}				
+		}
+
+		if (valid_point)
+		{
+			px += dpx;
+			py += dpy;
+		}
+
+		valid_point = true;
 
 		if (pa < 0)
 			pa += 2 * PI;
@@ -273,8 +354,8 @@ int main(int argv, char** argc)
 		w.clear();
 
 		draw_map(w);
-		draw_player(px, py, pa, w);
 		draw_rays(pa, px + 5, py + 5, w, map);
+		draw_player(px, py, pa, w);
 		SDL_SetRenderDrawColor(w.m_rend, 50, 50, 50, 255);
 		w.present();
 	}
